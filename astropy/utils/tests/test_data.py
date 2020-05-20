@@ -1661,6 +1661,56 @@ def test_download_file_wrong_size(monkeypatch):
         assert f.read() == b"a" * real_length
 
 
+def test_download_file_wrong_checksum(monkeypatch):
+    import contextlib
+    from astropy.utils.data import download_file
+
+    @contextlib.contextmanager
+    def mockurl(remote_url, timeout=None):
+        yield MockURL()
+
+    def mockurl_builder(tlscontext=None):
+        mock_opener = type('MockOpener', (object,), {})()
+        mock_opener.open = mockurl
+        return mock_opener
+
+    class MockURL:
+        def __init__(self):
+            self.reader = io.BytesIO(b"a" * real_length)
+
+        def info(self):
+            return {"Content-Length": str(report_length), "Content-MD5": report_content_md5}
+
+        def read(self, length=None):
+            return self.reader.read(length)
+
+    monkeypatch.setattr(urllib.request, "build_opener", mockurl_builder)
+
+    with pytest.raises(urllib.error.URLError):
+        report_content_md5 = 'abadchecksum'
+        report_length = 1023
+        real_length = 1023
+        download_file(TESTURL, cache=False)
+
+    # Uses md5 if present
+    report_content_md5 = 'e3e210ff5dfc9da789cdbee262348db6'
+    report_length = 1023
+    real_length = 1023
+    fn = download_file(TESTURL, cache=False)
+    with open(fn, "rb") as f:
+        m = hashlib.md5()
+        m.update(f.read())
+        assert m.hexdigest() == report_content_md5
+        
+    # Falls back to content length checks
+    report_content_md5 = None
+    report_length = None
+    real_length = 1023
+    fn = download_file(TESTURL, cache=False)
+    with open(fn, "rb") as f:
+        assert f.read() == b"a" * real_length
+
+
 def test_can_make_directories_readonly(tmpdir):
     try:
         with readonly_dir(tmpdir):
