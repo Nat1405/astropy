@@ -1007,6 +1007,11 @@ def _download_file_from_source(source_url, show_progress=True, timeout=None,
         except (KeyError, ValueError, TypeError):
             size = None
 
+        try:
+            content_md5 = info['Content-MD5']
+        except (KeyError, ValueError, TypeError):
+            content_md5 = None
+
         if size is not None:
             check_free_space_in_dir(gettempdir(), size)
             if cache:
@@ -1044,6 +1049,11 @@ def _download_file_from_source(source_url, show_progress=True, timeout=None,
                             f"File was supposed to be {size} bytes but we "
                             f"only got {bytes_read} bytes. Download failed.",
                             content=None)
+                    if content_md5 is not None and content_md5 != hasher.hexdigest():
+                        raise urllib.error.URLError(
+                            f"Checksum of downloaded file does not match "
+                            f"checksum of file in server headers. "
+                            f"Download failed.")
                 except BaseException:
                     if os.path.exists(f.name):
                         try:
